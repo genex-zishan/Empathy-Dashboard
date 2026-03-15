@@ -1,0 +1,1721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Empathy Challenge Q1'26 — Live Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<style>
+/* ═══════════════════════════════════════════
+   OBSIDIAN DARK THEME — DESIGN TOKENS
+═══════════════════════════════════════════ */
+:root {
+  --bg-base:       #0d1117;
+  --bg-surface:    #161b22;
+  --bg-elevated:   #1c2333;
+  --bg-hover:      #21262d;
+  --border:        #30363d;
+  --border-muted:  #21262d;
+
+  --text-primary:  #e6edf3;
+  --text-secondary:#8b949e;
+  --text-muted:    #6e7681;
+
+  --blue:          #58a6ff;
+  --blue-dim:      rgba(88,166,255,0.15);
+  --green:         #3fb950;
+  --green-dim:     rgba(63,185,80,0.15);
+  --orange:        #e3b341;
+  --orange-dim:    rgba(227,179,65,0.15);
+  --red:           #f85149;
+  --red-dim:       rgba(248,81,73,0.15);
+  --purple:        #bc8cff;
+  --purple-dim:    rgba(188,140,255,0.15);
+  --teal:          #39d353;
+  --cyan:          #79c0ff;
+  --pink:          #ff7b72;
+
+  --radius-sm:  8px;
+  --radius-md:  12px;
+  --radius-lg:  16px;
+  --radius-xl:  20px;
+
+  --shadow:     0 4px 24px rgba(0,0,0,0.4);
+  --shadow-lg:  0 8px 40px rgba(0,0,0,0.6);
+  --transition: all 0.2s cubic-bezier(0.4,0,0.2,1);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ══════════════════════════════════════════
+   LOADING OVERLAY
+══════════════════════════════════════════ */
+#loadingOverlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: var(--bg-base);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 20px;
+  transition: opacity 0.5s ease;
+}
+#loadingOverlay.hidden { opacity: 0; pointer-events: none; }
+.loader-ring {
+  width: 56px; height: 56px;
+  border: 3px solid var(--border);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loader-text { color: var(--text-secondary); font-size: 0.88rem; letter-spacing: 1px; }
+.loader-sub   { color: var(--text-muted); font-size: 0.75rem; }
+
+/* ══════════════════════════════════════════
+   HEADER
+══════════════════════════════════════════ */
+.header {
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 32px;
+  height: 68px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+  backdrop-filter: blur(12px);
+}
+.header-left { display: flex; align-items: center; gap: 14px; }
+.header-logo {
+  width: 38px; height: 38px;
+  background: linear-gradient(135deg, var(--blue), var(--purple));
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+}
+.header-title { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
+.header-sub   { font-size: 0.72rem; color: var(--text-muted); margin-top: 1px; }
+
+.header-right { display: flex; align-items: center; gap: 12px; }
+.live-badge {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--green-dim); border: 1px solid rgba(63,185,80,0.3);
+  border-radius: 20px; padding: 5px 12px; font-size: 0.75rem; font-weight: 600; color: var(--green);
+}
+.live-dot { width: 7px; height: 7px; background: var(--green); border-radius: 50%; animation: pulse 1.8s ease infinite; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.85)} }
+
+.refresh-btn, .export-btn, .theme-btn {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 16px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); cursor: pointer;
+  font-size: 0.78rem; font-weight: 600;
+  transition: var(--transition); background: var(--bg-elevated); color: var(--text-primary);
+}
+.refresh-btn:hover { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); }
+.export-btn:hover  { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+.theme-btn:hover   { background: var(--orange-dim); border-color: var(--orange); color: var(--orange); }
+.refresh-btn.spinning svg { animation: spin 0.8s linear infinite; }
+
+#lastRefresh { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
+#autoRefreshCountdown { font-size: 0.72rem; color: var(--text-muted); }
+
+/* ══════════════════════════════════════════
+   FILTER BAR
+══════════════════════════════════════════ */
+.filter-bar {
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-muted);
+  padding: 12px 32px;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+}
+.filter-group { display: flex; align-items: center; gap: 8px; }
+.filter-label { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; white-space: nowrap; }
+.filter-select {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 6px 12px;
+  font-size: 0.82rem; color: var(--text-primary); cursor: pointer;
+  outline: none; transition: var(--transition); min-width: 140px;
+}
+.filter-select:hover, .filter-select:focus { border-color: var(--blue); }
+.filter-sep { width: 1px; height: 24px; background: var(--border); }
+
+.search-wrap { position: relative; flex: 1; min-width: 200px; max-width: 320px; }
+.search-wrap svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-muted); pointer-events: none; }
+.search-input {
+  width: 100%; background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 7px 12px 7px 34px;
+  font-size: 0.82rem; color: var(--text-primary); outline: none; transition: var(--transition);
+}
+.search-input::placeholder { color: var(--text-muted); }
+.search-input:focus { border-color: var(--blue); }
+
+.score-filter-wrap { display: flex; align-items: center; gap: 8px; }
+.range-input {
+  -webkit-appearance: none; width: 120px; height: 4px;
+  background: var(--border); border-radius: 2px; outline: none; cursor: pointer;
+}
+.range-input::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--blue); cursor: pointer;
+}
+#scoreRangeLabel { font-size: 0.75rem; color: var(--blue); font-weight: 600; min-width: 50px; }
+
+.filter-clear-btn {
+  padding: 6px 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--red); background: transparent;
+  color: var(--red); font-size: 0.75rem; font-weight: 600; cursor: pointer;
+  transition: var(--transition);
+}
+.filter-clear-btn:hover { background: var(--red-dim); }
+
+/* ══════════════════════════════════════════
+   MAIN LAYOUT
+══════════════════════════════════════════ */
+.main { padding: 24px 32px; max-width: 1700px; margin: 0 auto; }
+
+.section-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 16px; margin-top: 28px;
+}
+.section-header h2 { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); }
+.section-line { flex: 1; height: 1px; background: var(--border-muted); }
+
+/* ══════════════════════════════════════════
+   KPI CARDS
+══════════════════════════════════════════ */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 16px; margin-bottom: 8px;
+}
+.kpi-card {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 20px;
+  transition: var(--transition); position: relative; overflow: hidden;
+  cursor: default;
+}
+.kpi-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--accent-color, var(--blue));
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+.kpi-card::after {
+  content: ''; position: absolute; top: -30px; right: -20px;
+  width: 80px; height: 80px; border-radius: 50%;
+  background: var(--accent-color, var(--blue)); opacity: 0.06;
+  transition: var(--transition);
+}
+.kpi-card:hover { border-color: var(--accent-color, var(--blue)); transform: translateY(-2px); box-shadow: var(--shadow); }
+.kpi-card:hover::after { opacity: 0.12; transform: scale(1.3); }
+.kpi-card.c-blue   { --accent-color: var(--blue); }
+.kpi-card.c-green  { --accent-color: var(--green); }
+.kpi-card.c-orange { --accent-color: var(--orange); }
+.kpi-card.c-purple { --accent-color: var(--purple); }
+.kpi-card.c-red    { --accent-color: var(--red); }
+.kpi-card.c-cyan   { --accent-color: var(--cyan); }
+
+.kpi-icon  { font-size: 1.3rem; margin-bottom: 10px; }
+.kpi-label { font-size: 0.7rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; }
+.kpi-value { font-size: 1.9rem; font-weight: 800; color: var(--text-primary); line-height: 1.1; margin-top: 3px; }
+.kpi-sub   { font-size: 0.72rem; color: var(--text-muted); margin-top: 5px; }
+.kpi-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.68rem; font-weight: 700; padding: 2px 8px;
+  border-radius: 20px; margin-top: 8px;
+}
+.badge-green  { background: var(--green-dim);  color: var(--green);  border: 1px solid rgba(63,185,80,0.3); }
+.badge-red    { background: var(--red-dim);    color: var(--red);    border: 1px solid rgba(248,81,73,0.3); }
+.badge-blue   { background: var(--blue-dim);   color: var(--blue);   border: 1px solid rgba(88,166,255,0.3); }
+.badge-orange { background: var(--orange-dim); color: var(--orange); border: 1px solid rgba(227,179,65,0.3); }
+
+/* ══════════════════════════════════════════
+   CHART GRID
+══════════════════════════════════════════ */
+.chart-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.chart-grid-3 { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.chart-grid-full { display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 16px; }
+
+.chart-card {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 22px;
+  display: flex; flex-direction: column; transition: var(--transition);
+}
+.chart-card:hover { border-color: rgba(88,166,255,0.3); }
+.chart-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 4px; }
+.chart-card-header h3 { font-size: 0.88rem; font-weight: 700; color: var(--text-primary); }
+.chart-type-toggle {
+  display: flex; gap: 4px;
+}
+.toggle-btn {
+  padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border);
+  font-size: 0.68rem; font-weight: 600; cursor: pointer;
+  background: transparent; color: var(--text-muted); transition: var(--transition);
+}
+.toggle-btn.active { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); }
+.chart-sub   { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 14px; }
+.chart-container { flex: 1; position: relative; min-height: 230px; }
+
+/* ══════════════════════════════════════════
+   STAR PERFORMERS
+══════════════════════════════════════════ */
+.star-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px; margin-bottom: 16px;
+}
+.star-card {
+  background: linear-gradient(135deg, var(--bg-elevated), var(--bg-surface));
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 18px; position: relative; overflow: hidden;
+  transition: var(--transition); cursor: default;
+}
+.star-card::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(135deg, var(--blue-dim), transparent);
+  opacity: 0; transition: var(--transition);
+}
+.star-card:hover { border-color: var(--blue); transform: translateY(-2px); box-shadow: var(--shadow); }
+.star-card:hover::before { opacity: 1; }
+.star-emoji { font-size: 1.4rem; position: absolute; right: 14px; top: 12px; opacity: 0.25; }
+.star-lob   { font-size: 0.65rem; font-weight: 700; color: var(--blue); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.star-name  { font-size: 0.88rem; font-weight: 700; color: var(--text-primary); line-height: 1.25; }
+.star-score { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+.star-pill  {
+  display: inline-block; margin-top: 8px;
+  font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 20px;
+  background: var(--green-dim); color: var(--green); border: 1px solid rgba(63,185,80,0.3);
+}
+
+/* ══════════════════════════════════════════
+   LEADERSHIP CARDS
+══════════════════════════════════════════ */
+.leader-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px; margin-bottom: 16px;
+}
+.leader-card {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 16px;
+  display: flex; align-items: center; gap: 14px; transition: var(--transition);
+}
+.leader-card:hover { border-color: rgba(88,166,255,0.4); background: var(--bg-elevated); }
+.leader-avatar {
+  width: 42px; height: 42px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.85rem; font-weight: 800; flex-shrink: 0; color: #fff;
+}
+.av-b { background: linear-gradient(135deg, #1a6ef5, #58a6ff); }
+.av-g { background: linear-gradient(135deg, #1a8a45, #3fb950); }
+.av-p { background: linear-gradient(135deg, #6a2fa0, #bc8cff); }
+.av-o { background: linear-gradient(135deg, #c47a10, #e3b341); }
+.av-r { background: linear-gradient(135deg, #a01a1a, #f85149); }
+.leader-role  { font-size: 0.65rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.7px; }
+.leader-name  { font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-top: 2px; }
+.leader-score { font-size: 1rem; font-weight: 900; color: var(--blue); margin-top: 4px; }
+
+/* ══════════════════════════════════════════
+   LEADERBOARD
+══════════════════════════════════════════ */
+.lb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; margin-bottom: 16px; }
+.lb-card {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 22px; overflow: hidden;
+}
+.lb-card h3 { font-size: 0.88rem; font-weight: 700; color: var(--text-primary); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.lb-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 0; border-bottom: 1px solid var(--border-muted);
+  transition: var(--transition); cursor: default;
+}
+.lb-item:last-child { border-bottom: none; }
+.lb-item:hover { background: var(--bg-hover); border-radius: var(--radius-sm); padding-left: 6px; }
+.rank-badge {
+  min-width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; font-weight: 800; flex-shrink: 0;
+}
+.r1 { background: rgba(227,179,65,0.15); color: var(--orange); border: 1.5px solid var(--orange); }
+.r2 { background: rgba(139,148,158,0.15); color: #8b949e; border: 1.5px solid #8b949e; }
+.r3 { background: rgba(205,127,50,0.15); color: #cd7f32; border: 1.5px solid #cd7f32; }
+.rN { background: var(--bg-elevated); color: var(--text-muted); border: 1.5px solid var(--border); }
+.lb-info { flex: 1; min-width: 0; }
+.lb-name { font-size: 0.82rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-meta { font-size: 0.68rem; color: var(--text-muted); margin-top: 1px; }
+.lb-bar-wrap { width: 80px; background: var(--bg-elevated); border-radius: 4px; height: 5px; overflow: hidden; flex-shrink: 0; }
+.lb-bar { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width 0.6s ease; }
+.lb-score-val { font-size: 0.85rem; font-weight: 800; color: var(--blue); min-width: 46px; text-align: right; flex-shrink: 0; }
+
+/* ══════════════════════════════════════════
+   SLOTS
+══════════════════════════════════════════ */
+.slots-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(155px,1fr));
+  gap: 12px; margin-bottom: 16px;
+}
+.slot-card {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 18px; text-align: center;
+  transition: var(--transition); position: relative; overflow: hidden;
+}
+.slot-card::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--blue), var(--cyan));
+}
+.slot-card:hover { border-color: var(--blue); transform: translateY(-2px); }
+.slot-lob { font-size: 0.65rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.slot-num { font-size: 1.9rem; font-weight: 900; color: var(--text-primary); line-height: 1; }
+.slot-num.full { color: var(--red); }
+.slot-label { font-size: 0.68rem; color: var(--text-muted); margin-top: 4px; }
+.slot-bar-wrap { width: 100%; background: var(--bg-elevated); border-radius: 4px; height: 4px; overflow: hidden; margin-top: 10px; }
+.slot-bar { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+
+/* ══════════════════════════════════════════
+   AGENT TABLE
+══════════════════════════════════════════ */
+.table-card {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 22px; overflow: hidden;
+}
+.table-header {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px; margin-bottom: 16px;
+}
+.table-header h3 { font-size: 0.88rem; font-weight: 700; color: var(--text-primary); }
+.table-controls { display: flex; align-items: center; gap: 10px; }
+.page-size-select {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 5px 10px;
+  font-size: 0.78rem; color: var(--text-primary); cursor: pointer; outline: none;
+}
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+thead th {
+  background: var(--bg-elevated); padding: 11px 14px;
+  text-align: left; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.8px;
+  border-bottom: 1px solid var(--border); white-space: nowrap;
+  cursor: pointer; user-select: none; transition: var(--transition);
+}
+thead th:hover { color: var(--blue); }
+thead th.sort-asc::after  { content: ' ↑'; color: var(--blue); }
+thead th.sort-desc::after { content: ' ↓'; color: var(--blue); }
+tbody tr { border-bottom: 1px solid var(--border-muted); transition: var(--transition); cursor: pointer; }
+tbody tr:hover { background: var(--bg-hover); }
+tbody td { padding: 10px 14px; color: var(--text-primary); vertical-align: middle; }
+.pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 20px; font-size: 0.68rem; font-weight: 700; white-space: nowrap; }
+.pill-q   { background: var(--green-dim);  color: var(--green);  border: 1px solid rgba(63,185,80,0.3); }
+.pill-ne  { background: var(--red-dim);    color: var(--red);    border: 1px solid rgba(248,81,73,0.3); }
+.pill-lob { background: var(--blue-dim);   color: var(--blue);   border: 1px solid rgba(88,166,255,0.25); cursor: pointer; }
+.pill-lob:hover { background: rgba(88,166,255,0.25); }
+.site-badge { font-size: 0.68rem; font-weight: 700; padding: 2px 7px; border-radius: 4px; }
+.site-ctg { background: rgba(188,140,255,0.15); color: var(--purple); }
+.site-dhk { background: rgba(88,166,255,0.15); color: var(--cyan); }
+.mini-bar-wrap { display: inline-block; width: 48px; height: 4px; background: var(--bg-elevated); border-radius: 2px; overflow: hidden; vertical-align: middle; margin-left: 6px; }
+.mini-bar { height: 100%; border-radius: 2px; }
+.bar-g { background: var(--green); }
+.bar-o { background: var(--orange); }
+.bar-r { background: var(--red); }
+
+/* PAGINATION */
+.pagination {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 16px; flex-wrap: wrap; gap: 10px;
+}
+.page-info { font-size: 0.75rem; color: var(--text-muted); }
+.page-btns { display: flex; gap: 6px; }
+.page-btn {
+  padding: 5px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--bg-elevated); color: var(--text-secondary); font-size: 0.75rem;
+  cursor: pointer; transition: var(--transition); font-weight: 600; min-width: 32px; text-align: center;
+}
+.page-btn:hover { border-color: var(--blue); color: var(--blue); }
+.page-btn.active { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); }
+.page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ══════════════════════════════════════════
+   MODAL (Agent Detail)
+══════════════════════════════════════════ */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+  align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius-xl); padding: 28px; max-width: 520px; width: 90%;
+  box-shadow: var(--shadow-lg); position: relative; max-height: 90vh; overflow-y: auto;
+}
+.modal-close {
+  position: absolute; top: 16px; right: 16px;
+  background: var(--bg-hover); border: 1px solid var(--border); border-radius: 50%;
+  width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 16px; color: var(--text-muted); transition: var(--transition);
+}
+.modal-close:hover { color: var(--red); border-color: var(--red); }
+.modal-name { font-size: 1.2rem; font-weight: 800; color: var(--text-primary); margin-bottom: 4px; }
+.modal-meta { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 20px; }
+.modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.modal-stat { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; }
+.modal-stat-label { font-size: 0.65rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; }
+.modal-stat-value { font-size: 1.4rem; font-weight: 800; color: var(--text-primary); margin-top: 3px; }
+.modal-bar-section { margin-top: 18px; }
+.modal-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.modal-bar-label { font-size: 0.72rem; color: var(--text-muted); width: 180px; flex-shrink: 0; }
+.modal-bar-track { flex: 1; background: var(--bg-surface); border-radius: 4px; height: 8px; overflow: hidden; }
+.modal-bar-fill  { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width 0.8s ease; }
+.modal-bar-val   { font-size: 0.75rem; font-weight: 700; color: var(--blue); min-width: 38px; text-align: right; }
+
+/* ══════════════════════════════════════════
+   ERROR / EMPTY STATES
+══════════════════════════════════════════ */
+.error-banner {
+  background: var(--red-dim); border: 1px solid rgba(248,81,73,0.3);
+  border-radius: var(--radius-md); padding: 14px 18px; margin-bottom: 16px;
+  font-size: 0.82rem; color: var(--red); display: none;
+}
+.empty-state { text-align: center; padding: 40px; color: var(--text-muted); font-size: 0.88rem; }
+
+/* ══════════════════════════════════════════
+   TOAST
+══════════════════════════════════════════ */
+#toast {
+  position: fixed; bottom: 28px; right: 28px; z-index: 9999;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 12px 20px;
+  font-size: 0.82rem; color: var(--text-primary);
+  box-shadow: var(--shadow-lg); transform: translateY(80px); opacity: 0;
+  transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+}
+#toast.show { transform: translateY(0); opacity: 1; }
+#toast.success { border-color: var(--green); color: var(--green); }
+#toast.error   { border-color: var(--red);   color: var(--red);   }
+
+/* ══════════════════════════════════════════
+   FOOTER
+══════════════════════════════════════════ */
+.footer {
+  text-align: center; padding: 20px; font-size: 0.72rem; color: var(--text-muted);
+  border-top: 1px solid var(--border-muted); margin-top: 12px;
+}
+.footer a { color: var(--blue); text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
+
+/* ══════════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════════ */
+@media(max-width: 1100px) {
+  .chart-grid-3 { grid-template-columns: 1fr 1fr; }
+  .chart-grid-3 .chart-card:first-child { grid-column: span 2; }
+}
+@media(max-width: 768px) {
+  .header { padding: 0 16px; height: auto; flex-wrap: wrap; gap: 10px; padding-top: 12px; padding-bottom: 12px; }
+  .main { padding: 16px; }
+  .filter-bar { padding: 10px 16px; }
+  .chart-grid-2, .chart-grid-3, .lb-grid { grid-template-columns: 1fr; }
+  .chart-grid-3 .chart-card:first-child { grid-column: auto; }
+  .modal-grid { grid-template-columns: 1fr; }
+}
+
+/* ── NUMBER COUNTER ANIMATION ── */
+.kpi-value[data-animate] { transition: none; }
+</style>
+</head>
+<body>
+
+<!-- LOADING OVERLAY -->
+<div id="loadingOverlay">
+  <div class="loader-ring"></div>
+  <div class="loader-text">Fetching Live Data…</div>
+  <div class="loader-sub">Connecting to Google Sheets</div>
+</div>
+
+<!-- ERROR BANNER -->
+<div class="error-banner" id="errorBanner">
+  ⚠️ Could not fetch live data from Google Sheets. Showing last cached data.
+  <button onclick="fetchData()" style="margin-left:12px;padding:3px 10px;border-radius:6px;border:1px solid var(--red);background:transparent;color:var(--red);cursor:pointer;font-size:0.75rem;">Retry</button>
+</div>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <div class="header-logo">🌟</div>
+    <div>
+      <div class="header-title">STEP UP TO THE EMPATHY CHALLENGE</div>
+      <div class="header-sub">Q1 2026 · Live Executive Dashboard · <span id="lastRefresh">—</span></div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge"><span class="live-dot"></span> Live</div>
+    <span id="autoRefreshCountdown"></span>
+    <button class="refresh-btn" id="refreshBtn" onclick="fetchData()">
+      <svg id="refreshIcon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      Refresh
+    </button>
+    <button class="export-btn" onclick="exportCSV()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Export CSV
+    </button>
+  </div>
+</div>
+
+<!-- FILTER BAR -->
+<div class="filter-bar">
+  <div class="filter-group">
+    <span class="filter-label">Site</span>
+    <select class="filter-select" id="fSite" onchange="applyFilters()">
+      <option value="all">All Sites</option>
+      <option value="CTG">CTG</option>
+      <option value="DHK">DHK</option>
+    </select>
+  </div>
+  <div class="filter-sep"></div>
+  <div class="filter-group">
+    <span class="filter-label">Channel</span>
+    <select class="filter-select" id="fChannel" onchange="applyFilters()">
+      <option value="all">All Channels</option>
+      <option value="Call Center">Call Center</option>
+      <option value="Digital">Digital</option>
+    </select>
+  </div>
+  <div class="filter-sep"></div>
+  <div class="filter-group">
+    <span class="filter-label">LOB</span>
+    <select class="filter-select" id="fLOB" onchange="applyFilters()">
+      <option value="all">All LOBs</option>
+      <option value="Mass">Mass</option>
+      <option value="Premium">Premium</option>
+      <option value="2nd Tier">2nd Tier</option>
+      <option value="Retail">Retail</option>
+      <option value="158">158</option>
+      <option value="Live Chat">Live Chat</option>
+      <option value="Email">Email</option>
+    </select>
+  </div>
+  <div class="filter-sep"></div>
+  <div class="filter-group">
+    <span class="filter-label">Eligibility</span>
+    <select class="filter-select" id="fElig" onchange="applyFilters()">
+      <option value="all">All</option>
+      <option value="QUALIFIED">Qualified Only</option>
+      <option value="NOT ELIGIBLE">Not Eligible Only</option>
+    </select>
+  </div>
+  <div class="filter-sep"></div>
+  <div class="filter-group">
+    <span class="filter-label">📅 Month</span>
+    <select class="filter-select" id="fMonth" onchange="applyFilters()" style="min-width:160px">
+      <option value="all">🗓️ All Time</option>
+      <option value="January">January</option>
+      <option value="February">February</option>
+      <option value="March">March</option>
+      <option value="April">April</option>
+      <option value="May">May</option>
+      <option value="June">June</option>
+      <option value="July">July</option>
+      <option value="August">August</option>
+      <option value="September">September</option>
+      <option value="October">October</option>
+      <option value="November">November</option>
+      <option value="December">December</option>
+    </select>
+  </div>
+  <div class="filter-sep"></div>
+  <div class="score-filter-wrap">
+    <span class="filter-label">Min Score</span>
+    <input type="range" class="range-input" id="fMinScore" min="0" max="100" value="0" oninput="scoreRangeChange(this)">
+    <span id="scoreRangeLabel">0%+</span>
+  </div>
+  <div class="filter-sep"></div>
+  <div class="search-wrap">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" class="search-input" id="fSearch" placeholder="Search agent name…" oninput="applyFilters()">
+  </div>
+  <button class="filter-clear-btn" onclick="clearFilters()">✕ Clear</button>
+</div>
+
+<!-- MAIN -->
+<div class="main" id="mainContent" style="display:none">
+
+  <!-- KPIs -->
+  <div class="section-header"><h2>📊 Key Metrics</h2><div class="section-line"></div></div>
+  <div class="kpi-grid">
+    <div class="kpi-card c-blue">
+      <div class="kpi-icon">📞</div>
+      <div class="kpi-label">CC Floor Avg</div>
+      <div class="kpi-value" id="kCC">—</div>
+      <div class="kpi-sub">Call Center</div>
+      <span class="kpi-badge badge-blue" id="kCCBadge"></span>
+    </div>
+    <div class="kpi-card c-cyan">
+      <div class="kpi-icon">💻</div>
+      <div class="kpi-label">Digital Floor Avg</div>
+      <div class="kpi-value" id="kDig">—</div>
+      <div class="kpi-sub">Digital Channel</div>
+      <span class="kpi-badge badge-orange" id="kDigBadge"></span>
+    </div>
+    <div class="kpi-card c-green">
+      <div class="kpi-icon">✅</div>
+      <div class="kpi-label">Qualified Agents</div>
+      <div class="kpi-value" id="kQual">—</div>
+      <div class="kpi-sub" id="kQualSub">of total agents</div>
+      <span class="kpi-badge badge-green" id="kQualBadge"></span>
+    </div>
+    <div class="kpi-card c-orange">
+      <div class="kpi-icon">⚖️</div>
+      <div class="kpi-label">Avg Weighted Score</div>
+      <div class="kpi-value" id="kWeighted">—</div>
+      <div class="kpi-sub">Floor average</div>
+      <span class="kpi-badge badge-orange" id="kWeightedBadge"></span>
+    </div>
+    <div class="kpi-card c-purple">
+      <div class="kpi-icon">💡</div>
+      <div class="kpi-label">Process IDEAs</div>
+      <div class="kpi-value" id="kIdeas">—</div>
+      <div class="kpi-sub" id="kIdeasSub">Approved | — success</div>
+      <span class="kpi-badge badge-blue">Q1 2026</span>
+    </div>
+    <div class="kpi-card c-red">
+      <div class="kpi-icon">👥</div>
+      <div class="kpi-label">Total Agents</div>
+      <div class="kpi-value" id="kTotal">—</div>
+      <div class="kpi-sub" id="kTotalSub">in current filter</div>
+      <span class="kpi-badge badge-blue" id="kTotalBadge"></span>
+    </div>
+  </div>
+
+  <!-- CHARTS ROW 1 -->
+  <div class="section-header"><h2>📈 Performance Analytics</h2><div class="section-line"></div></div>
+  <div class="chart-grid-2">
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <h3>Avg Empathy Score by LOB</h3>
+        <div class="chart-type-toggle">
+          <button class="toggle-btn active" onclick="toggleChartType('lobEmpathy','bar',this)">Bar</button>
+          <button class="toggle-btn" onclick="toggleChartType('lobEmpathy','horizontalBar',this)">H-Bar</button>
+        </div>
+      </div>
+      <div class="chart-sub">Mean empathy score across Lines of Business</div>
+      <div class="chart-container"><canvas id="cLOBEmpathy"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <h3>Eligibility Breakdown by LOB</h3>
+        <div class="chart-type-toggle">
+          <button class="toggle-btn active" onclick="toggleChartType('eligibility','stacked',this)">Stacked</button>
+          <button class="toggle-btn" onclick="toggleChartType('eligibility','grouped',this)">Grouped</button>
+        </div>
+      </div>
+      <div class="chart-sub">Qualified vs Not Eligible per Line of Business</div>
+      <div class="chart-container"><canvas id="cEligibility"></canvas></div>
+    </div>
+  </div>
+
+  <div class="chart-grid-3">
+    <div class="chart-card">
+      <div class="chart-card-header"><h3>Score Distribution</h3></div>
+      <div class="chart-sub">How agents are distributed across weighted score bands</div>
+      <div class="chart-container"><canvas id="cScoreDist"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-card-header"><h3>CTG vs DHK</h3></div>
+      <div class="chart-sub">Site-level empathy score comparison</div>
+      <div class="chart-container"><canvas id="cSite"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-card-header"><h3>Attendance Distribution</h3></div>
+      <div class="chart-sub">Agent days-in-office for February</div>
+      <div class="chart-container"><canvas id="cAttendance"></canvas></div>
+    </div>
+  </div>
+
+  <div class="chart-grid-2">
+    <div class="chart-card">
+      <div class="chart-card-header"><h3>4 Empathy Sub-Metrics Breakdown</h3></div>
+      <div class="chart-sub">Average scores across the four empathy evaluation dimensions</div>
+      <div class="chart-container"><canvas id="cRadar"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <h3>CSAT% by LOB</h3>
+        <div class="chart-type-toggle">
+          <button class="toggle-btn active" onclick="toggleChartType('csat','line',this)">Line</button>
+          <button class="toggle-btn" onclick="toggleChartType('csat','bar',this)">Bar</button>
+        </div>
+      </div>
+      <div class="chart-sub">Average CSAT / Escalation Accuracy by LOB</div>
+      <div class="chart-container"><canvas id="cCSAT"></canvas></div>
+    </div>
+  </div>
+
+  <!-- TOP PERFORMERS -->
+  <div class="section-header"><h2>⭐ Top Performers by LOB</h2><div class="section-line"></div></div>
+  <div class="star-grid" id="starGrid">
+    <!-- Populated from data -->
+    <div class="star-card"><span class="star-emoji">🌟</span><div class="star-lob">🏅 Mass</div><div class="star-name">Tawhidul Islam</div><div class="star-score">Weighted: 95.65%</div><div class="star-pill">Consistent Star</div></div>
+    <div class="star-card"><span class="star-emoji">🌟</span><div class="star-lob">🏅 Premium</div><div class="star-name">Nusrat Jahan Nur</div><div class="star-score">Weighted: 95.40%</div><div class="star-pill">Consistent Star</div></div>
+    <div class="star-card"><span class="star-emoji">🌟</span><div class="star-lob">🏅 2nd Tier</div><div class="star-name">Md Ahad Ali</div><div class="star-score">Empathy: 97.00%</div><div class="star-pill">Consistent Star</div></div>
+    <div class="star-card"><span class="star-emoji">🌟</span><div class="star-lob">🏅 Retail</div><div class="star-name">Faisal Mahmood</div><div class="star-score">Weighted: 97.00%</div><div class="star-pill">Consistent Star</div></div>
+    <div class="star-card"><span class="star-emoji">🌟</span><div class="star-lob">🏅 158</div><div class="star-name">Syeda Faiza Rashid</div><div class="star-score">Empathy: 95.00%</div><div class="star-pill">Consistent Star</div></div>
+    <div class="star-card"><span class="star-emoji">🌟</span><div class="star-lob">💬 Live Chat</div><div class="star-name">Md. Shanto Mondol</div><div class="star-score">Digital Top Agent</div><div class="star-pill">Consistent Star</div></div>
+    <div class="star-card"><span class="star-emoji">🌟</span><div class="star-lob">✉️ Email</div><div class="star-name">Md. Shanto Mondol</div><div class="star-score">Digital Top Agent</div><div class="star-pill">Consistent Star</div></div>
+  </div>
+
+  <!-- LEADERSHIP -->
+  <div class="section-header"><h2>👔 Leadership</h2><div class="section-line"></div></div>
+  <div class="leader-grid">
+    <div class="leader-card"><div class="leader-avatar av-b">ST</div><div><div class="leader-role">Mass Top TL</div><div class="leader-name">Sanjida Islam Tinny</div><div class="leader-score">56%</div></div></div>
+    <div class="leader-card"><div class="leader-avatar av-g">TI</div><div><div class="leader-role">Premium Top TL</div><div class="leader-name">Md. Tazlian Islam</div><div class="leader-score">55%</div></div></div>
+    <div class="leader-card"><div class="leader-avatar av-o">AH</div><div><div class="leader-role">Live Chat & Email TL</div><div class="leader-name">SM Abu Hena</div><div class="leader-score">62%</div></div></div>
+    <div class="leader-card"><div class="leader-avatar av-p">AD</div><div><div class="leader-role">CC Top QA</div><div class="leader-name">Anik Das</div><div class="leader-score">58%</div></div></div>
+    <div class="leader-card"><div class="leader-avatar av-b">RA</div><div><div class="leader-role">Digital Top QA</div><div class="leader-name">Rimi Akter</div><div class="leader-score">88%</div></div></div>
+  </div>
+
+  <!-- LEADERBOARD -->
+  <div class="section-header"><h2>🏆 Agent Leaderboards</h2><div class="section-line"></div></div>
+  <div class="lb-grid">
+    <div class="lb-card">
+      <h3>🥇 Top 10 — Weighted Score</h3>
+      <div id="lbWeighted"></div>
+    </div>
+    <div class="lb-card">
+      <h3>🎯 Top 10 — Empathy Score</h3>
+      <div id="lbEmpathy"></div>
+    </div>
+    <div class="lb-card">
+      <h3>👥 Top Team Leaders (Avg Team Empathy)</h3>
+      <div id="lbTL"></div>
+    </div>
+    <div class="lb-card">
+      <h3>🔍 Top QAs (Avg Team Empathy)</h3>
+      <div id="lbQA"></div>
+    </div>
+    <div class="lb-card">
+      <h3>🎓 Top CC Trainers (Avg Team Empathy)</h3>
+      <div id="lbCCTrainer"></div>
+    </div>
+    <div class="lb-card">
+      <h3>🎓 Top Digital Trainers (Avg Team Empathy)</h3>
+      <div id="lbDigTrainer"></div>
+    </div>
+  </div>
+
+  <!-- SLOTS -->
+  <div class="section-header"><h2>📋 Slots Remaining by LOB</h2><div class="section-line"></div></div>
+  <div class="slots-grid" id="slotsGrid"><div style="color:var(--muted);padding:16px;font-size:0.85rem">Loading slots…</div></div>
+
+  <!-- AGENT TABLE -->
+  <div class="section-header"><h2>📋 Agent Performance Table</h2><div class="section-line"></div></div>
+  <div class="table-card">
+    <div class="table-header">
+      <h3>All Agents — February 2026 <span style="color:var(--text-muted);font-weight:400;font-size:0.78rem" id="tableCount"></span></h3>
+      <div class="table-controls">
+        <span style="font-size:0.75rem;color:var(--text-muted)">Rows per page:</span>
+        <select class="page-size-select" id="pageSize" onchange="changePage(1)">
+          <option value="15">15</option>
+          <option value="25" selected>25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th onclick="sortTable('rank')">#</th>
+            <th onclick="sortTable('site')">Site</th>
+            <th onclick="sortTable('name')">Name</th>
+            <th onclick="sortTable('lob')">LOB</th>
+            <th onclick="sortTable('tl')">Team Lead</th>
+            <th onclick="sortTable('attendance')">Attend.</th>
+            <th onclick="sortTable('empathy')">Empathy</th>
+            <th onclick="sortTable('weighted')">Weighted</th>
+            <th onclick="sortTable('csat')">CSAT%</th>
+            <th onclick="sortTable('ce')">CE%</th>
+            <th onclick="sortTable('eligibility')">Eligibility</th>
+          </tr>
+        </thead>
+        <tbody id="agentTbody"></tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <div class="page-info" id="pageInfo"></div>
+      <div class="page-btns" id="pageBtns"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  Step Up to the Empathy Challenge Q1'26 · Live Dashboard ·
+  Data: <a href="https://docs.google.com/spreadsheets/d/1G7M1FSxg8-FwP0x0E2XuGrxhcpXTl_HFkwzIYLGLalM" target="_blank">Google Sheet</a> ·
+  Auto-refreshes every 5 minutes
+</div>
+
+<!-- AGENT MODAL -->
+<div class="modal-overlay" id="agentModal" onclick="closeModalOutside(event)">
+  <div class="modal" id="agentModalContent">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- ══════════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════════ -->
+<script>
+// ─────────────────────────────────────────
+// CONFIG
+// ─────────────────────────────────────────
+const SHEET_ID  = '1G7M1FSxg8-FwP0x0E2XuGrxhcpXTl_HFkwzIYLGLalM';
+const SHEET_GID = '0'; // Master_Data
+const EXEC_GID  = '28181189'; // Executive Dashboard
+const LEADERSHIP_SHEET = 'Leadership'; // Leadership tab (sheet name)
+const IDEA_SHEET = 'Process IDEA Count'; // Process IDEA Count tab
+const CSV_URL   = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
+const AUTO_REFRESH_SEC = 300; // 5 min
+
+const LOBS    = ['Mass','Premium','2nd Tier','Retail','158','Live Chat','Email'];
+const COLORS  = ['#58a6ff','#3fb950','#e3b341','#f85149','#bc8cff','#39d353','#79c0ff'];
+const COLORS_A= COLORS.map(c=>c+'55');
+
+// ─────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────
+let allData     = [];
+let filteredData= [];
+let sortKey     = 'weighted';
+let sortDir     = 'desc';
+let currentPage = 1;
+let charts      = {};
+let countdownTimer, countdownSec = AUTO_REFRESH_SEC;
+
+// ─────────────────────────────────────────
+// DATA HELPERS
+// ─────────────────────────────────────────
+function pct(val) {
+  if (val === null || val === undefined || val === '' || val === '--' || val === '#N/A') return null;
+  if (typeof val === 'number') return isNaN(val) ? null : val * (val <= 1 && val > 0 ? 100 : 1);
+  const n = parseFloat(String(val).replace('%',''));
+  return isNaN(n) ? null : n;
+}
+function gvizTableToRows(table) {
+  // Extract column labels from gviz table object
+  const cols = table.cols.map(c => (c.label || c.id || '').trim());
+  return (table.rows || []).map(row => {
+    const obj = {};
+    (row.c || []).forEach((cell, i) => {
+      obj[cols[i]] = (cell && cell.v !== null && cell.v !== undefined) ? cell.v : '';
+    });
+    return obj;
+  });
+}
+function mapRow(r) {
+  // Handles both string values (CSV) and native types (gviz)
+  const str = v => (v === null || v === undefined) ? '' : String(v).trim();
+  const num = v => { const n = parseFloat(str(v).replace('%','')); return isNaN(n) ? null : n; };
+  // Helper: find key case-insensitively / partially
+  const keys = Object.keys(r);
+  const find  = (part) => { const k = keys.find(k => k.toLowerCase().includes(part.toLowerCase())); return k ? r[k] : ''; };
+  return {
+    site:       str(find('Site')),
+    name:       str(r['Name']),
+    vdi:        str(r['VDI ID']),
+    tl:         str(r['TL']),
+    qa:         str(r['QA']),
+    trainer:    str(r['Trainer']),
+    channel:    str(r['Channel']),
+    lob:        str(r['LOB']),
+    group:      str(r['Digital Group']),
+    attendance: parseInt(str(r['Attendance'])) || 0,
+    empathy:    pct(find('Empathy')),
+    csat:       pct(find('CSAT')),
+    ce:         pct(r['CE%']),
+    eligibility:str(r['Eligibility']),
+    weighted:   pct(find('Weighted')),
+    ack:        pct(find('Acknowledgement')),
+    closing:    pct(find('Closing')),
+    listening:  pct(find('Listening')),
+    time:       pct(find('Time')),
+    month:      str(r['Month']),
+  };
+}
+
+// ─────────────────────────────────────────
+// FETCH LEADERSHIP TAB (TL, QA, Trainer scores)
+// ─────────────────────────────────────────
+function fetchLeadershipData() {
+  return new Promise((resolve) => {
+    const cb   = '__gviz_lead_' + Date.now();
+    const tag  = document.createElement('script');
+    const tout = setTimeout(() => { cleanup(); resolve(null); }, 10000);
+    window[cb] = function(data) {
+      clearTimeout(tout);
+      cleanup();
+      if (!data || !data.table) { resolve(null); return; }
+      const cols = data.table.cols.map(c => (c.label || c.id || '').trim());
+      const rows = (data.table.rows || []).map(row => {
+        const obj = {};
+        (row.c || []).forEach((cell, i) => {
+          obj[cols[i]] = (cell && cell.v !== null && cell.v !== undefined) ? cell.v : '';
+        });
+        return obj;
+      });
+      resolve(rows);
+    };
+    function cleanup() { delete window[cb]; tag.parentNode && tag.parentNode.removeChild(tag); }
+    tag.onerror = () => { clearTimeout(tout); cleanup(); resolve(null); };
+    tag.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:${cb}&sheet=${encodeURIComponent(LEADERSHIP_SHEET)}&headers=1&cachebust=${Date.now()}`;
+    document.head.appendChild(tag);
+  });
+}
+
+function applyLeadershipData(rows) {
+  if (!rows || !rows.length) return;
+
+  // Helper: parse percentage string → number
+  const pctNum = v => {
+    if (v === null || v === undefined || v === '' || v === '--') return null;
+    const n = parseFloat(String(v).replace('%', ''));
+    return isNaN(n) ? null : n;
+  };
+
+  // Filter only valid rows (Name not empty, not '--')
+  const valid = rows.filter(r => {
+    const name = String(r['Name'] || '').trim();
+    return name && name !== '--';
+  });
+
+  // Build leaderboard for a given role + optional channel filter
+  function buildLBFromLeadership(role, channel, elementId) {
+    let subset = valid.filter(r => String(r['Role'] || '').trim() === role);
+    if (channel) subset = subset.filter(r => String(r['Channel'] || '').trim() === channel);
+
+    const parsed = subset.map(r => ({
+      name:    String(r['Name'] || '').trim(),
+      channel: String(r['Channel'] || '').trim(),
+      empathy: pctNum(r['Team Empathy Avg']),
+      weighted:pctNum(r['Final Weighted Score']),
+    })).filter(r => r.empathy !== null && r.name)
+       .sort((a, b) => b.empathy - a.empathy)
+       .slice(0, 10);
+
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    if (!parsed.length) {
+      el.innerHTML = `<div class="empty-state">No ${role} data${channel ? ' for ' + channel : ''}.</div>`;
+      return;
+    }
+    el.innerHTML = parsed.map((r, i) => `
+      <div class="lb-item">
+        <div class="rank-badge ${i===0?'r1':i===1?'r2':i===2?'r3':'rN'}">${i+1}</div>
+        <div class="lb-info">
+          <div class="lb-name">${r.name}</div>
+          <div class="lb-meta">${r.channel}${r.weighted !== null ? ' · ' + r.weighted.toFixed(1) + '% weighted' : ''}</div>
+        </div>
+        <div class="lb-bar-wrap"><div class="lb-bar" style="width:${r.empathy||0}%"></div></div>
+        <div class="lb-score-val">${r.empathy.toFixed(1)}%</div>
+      </div>`).join('');
+  }
+
+  buildLBFromLeadership('TL',      null,          'lbTL');
+  buildLBFromLeadership('QA',      null,          'lbQA');
+  buildLBFromLeadership('Trainer', 'Call Center', 'lbCCTrainer');
+  buildLBFromLeadership('Trainer', 'Digital',     'lbDigTrainer');
+}
+
+
+// ─────────────────────────────────────────
+// FETCH PROCESS IDEA COUNT TAB
+// Columns: Date, Name, Role, Process IDEA, Details, Status
+// ─────────────────────────────────────────
+function fetchIdeaData() {
+  return new Promise((resolve) => {
+    const cb   = '__gviz_idea_' + Date.now();
+    const tag  = document.createElement('script');
+    const tout = setTimeout(() => { cleanup(); resolve(null); }, 10000);
+    window[cb] = function(data) {
+      clearTimeout(tout);
+      cleanup();
+      if (!data || !data.table) { resolve(null); return; }
+      const cols = data.table.cols.map(c => (c.label || c.id || '').trim());
+      const rows = (data.table.rows || []).map(row => {
+        const obj = {};
+        (row.c || []).forEach((cell, i) => {
+          obj[cols[i]] = (cell && cell.v !== null && cell.v !== undefined) ? cell.v : '';
+        });
+        return obj;
+      });
+      resolve(rows);
+    };
+    function cleanup() { delete window[cb]; tag.parentNode && tag.parentNode.removeChild(tag); }
+    tag.onerror = () => { clearTimeout(tout); cleanup(); resolve(null); };
+    tag.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:${cb}&sheet=${encodeURIComponent(IDEA_SHEET)}&headers=1&cachebust=${Date.now()}`;
+    document.head.appendChild(tag);
+  });
+}
+
+function applyIdeaData(rows) {
+  if (!rows) return;
+  // Filter valid rows: Name present and not '--'
+  const valid = rows.filter(r => {
+    const name = String(r['Name'] || '').trim();
+    return name && name !== '--';
+  });
+  const total    = valid.length;
+  const approved = valid.filter(r => String(r['Status'] || '').trim().toLowerCase() === 'approved').length;
+  const successPct = total > 0 ? Math.round((approved / total) * 100) : 0;
+
+  const kIdeas    = document.getElementById('kIdeas');
+  const kIdeasSub = document.getElementById('kIdeasSub');
+  if (kIdeas)    kIdeas.textContent    = approved;
+  if (kIdeasSub) kIdeasSub.textContent = `Approved | ${successPct}% success`;
+}
+
+
+// ─────────────────────────────────────────
+// FETCH via Google Visualization JSONP API
+// Works from local file:// (no CORS issues)
+// ─────────────────────────────────────────
+function fetchGvizJSONP() {
+  return new Promise((resolve, reject) => {
+    const cb   = '__gviz_' + Date.now();
+    const tag  = document.createElement('script');
+    const tout = setTimeout(() => { cleanup(); reject(new Error('Timeout')); }, 12000);
+    window[cb] = function(data) {
+      clearTimeout(tout);
+      cleanup();
+      if (data && data.table) resolve(data.table);
+      else reject(new Error('No table in response'));
+    };
+    function cleanup() { delete window[cb]; tag.parentNode && tag.parentNode.removeChild(tag); }
+    tag.onerror = () => { clearTimeout(tout); cleanup(); reject(new Error('Script load error')); };
+    // tqx=out:json;responseHandler:CALLBACK  →  Google returns callback(jsonData)
+    tag.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:${cb}&gid=${SHEET_GID}&headers=1&cachebust=${Date.now()}`;
+    document.head.appendChild(tag);
+  });
+}
+
+// ─────────────────────────────────────────
+// FETCH EXECUTIVE DASHBOARD (Process IDEAs, Slots)
+// ─────────────────────────────────────────
+function fetchExecDashboard() {
+  return new Promise((resolve) => {
+    const cb   = '__gviz_exec_' + Date.now();
+    const tag  = document.createElement('script');
+    const tout = setTimeout(() => {
+      cleanup();
+      resolve(null); // fail silently — don't break main data
+    }, 10000);
+    window[cb] = function(data) {
+      clearTimeout(tout);
+      cleanup();
+      resolve(data && data.table ? data.table : null);
+    };
+    function cleanup() { delete window[cb]; tag.parentNode && tag.parentNode.removeChild(tag); }
+    tag.onerror = () => { clearTimeout(tout); cleanup(); resolve(null); };
+    tag.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:${cb}&gid=${EXEC_GID}&headers=0&cachebust=${Date.now()}`;
+    document.head.appendChild(tag);
+  });
+}
+
+function applyExecData(table) {
+  if (!table) return;
+  // Convert gviz table to a 2D array (rows × cols of raw values)
+  const grid = (table.rows || []).map(row =>
+    (row.c || []).map(cell => (cell && cell.v !== null && cell.v !== undefined) ? cell.v : '')
+  );
+
+  // Process IDEAs now handled by fetchIdeaData() / applyIdeaData() — not here.
+
+  // ── Slots ──────────────────────────────────────────────────
+  // Scan rows for "Mass", "Premium", "2nd Tier", "Retail", "158", "Live Chat", "Email"
+  // and pick up their slot numbers
+  const SLOT_DEFS = [
+    { key: 'Mass',       label: 'Mass',      total: 50,  color: 'var(--blue)'   },
+    { key: 'Premium',    label: 'Premium',   total: 50,  color: 'var(--cyan)'   },
+    { key: '2nd Tier',   label: '2nd Tier',  total: 50,  color: 'var(--orange)' },
+    { key: 'Retail',     label: 'Retail',    total: 30,  color: 'var(--purple)' },
+    { key: '158',        label: '158',       total: 30,  color: 'var(--green)'  },
+    { key: 'Live Chat',  label: 'Live Chat', total: 100, color: 'var(--green)'  },
+    { key: 'Email',      label: 'Email',     total: 30,  color: 'var(--orange)' },
+  ];
+
+  const slotData = {};
+  for (let ri = 0; ri < grid.length; ri++) {
+    for (let ci = 0; ci < grid[ri].length; ci++) {
+      const cellStr = String(grid[ri][ci] || '').trim();
+      SLOT_DEFS.forEach(sd => {
+        if (cellStr.toLowerCase() === sd.key.toLowerCase()) {
+          // Look for the nearest numeric value in same row (forward)
+          for (let ni = ci + 1; ni < Math.min(ci + 5, grid[ri].length); ni++) {
+            const raw = String(grid[ri][ni] || '').trim();
+            const v = parseInt(raw);
+            if (!isNaN(v)) {
+              if (!slotData[sd.key]) slotData[sd.key] = { num: v, raw: raw };
+              break;
+            }
+            // Handle Live Chat group format "G1:28 | G2:18 | G3:23"
+            if (raw.includes('G1') || raw.includes('G2') || raw.includes('G3') || raw.includes('|')) {
+              if (!slotData[sd.key]) slotData[sd.key] = { num: null, raw: raw };
+              break;
+            }
+          }
+        }
+      });
+    }
+  }
+
+  const slotsGrid = document.getElementById('slotsGrid');
+  if (!slotsGrid) return;
+
+  const cards = SLOT_DEFS.map(sd => {
+    const info  = slotData[sd.key];
+    const num   = info ? info.num : null;
+    const raw   = info ? info.raw : null;
+    const isFull = num !== null && num === 0;
+    const displayNum = raw && info.num === null ? `<span style="font-size:0.9rem">${raw}</span>`
+                      : (num !== null ? num : '—');
+    const barPct = (num !== null && sd.total > 0) ? Math.min(100, Math.round((num / sd.total) * 100)) : 0;
+    const barColor = isFull ? 'var(--red)' : (sd.color);
+    return `<div class="slot-card">
+      <div class="slot-lob">${sd.label}</div>
+      <div class="slot-num${isFull?' full':''}">${displayNum}</div>
+      <div class="slot-label">slots remaining</div>
+      <div class="slot-bar-wrap"><div class="slot-bar" style="width:${isFull?100:barPct}%;background:${barColor}"></div></div>
+    </div>`;
+  });
+  slotsGrid.innerHTML = cards.join('');
+}
+
+
+async function fetchData() {
+  const btn = document.getElementById('refreshBtn');
+  const icon= document.getElementById('refreshIcon');
+  btn.classList.add('spinning');
+  icon.style.animation = 'spin 0.8s linear infinite';
+
+  try {
+    const table = await fetchGvizJSONP();
+    const rows  = gvizTableToRows(table);
+    const mapped = rows.filter(r => String(r['Name']||'').trim() !== '').map(mapRow);
+    if (!mapped.length) throw new Error('Empty dataset — check sheet is public');
+    allData = mapped;
+    document.getElementById('errorBanner').style.display = 'none';
+    showToast(`✅ Live data loaded — ${allData.length} agents`, 'success');
+    // Fetch supporting tabs in parallel (non-blocking)
+    fetchExecDashboard().then(applyExecData).catch(() => {});
+    fetchLeadershipData().then(applyLeadershipData).catch(() => {});
+    fetchIdeaData().then(applyIdeaData).catch(() => {});
+  } catch (e) {
+    console.error('Fetch error:', e);
+    document.getElementById('errorBanner').innerHTML =
+      `⚠️ <strong>Could not load live data.</strong> Error: ${e.message}. Make sure the Google Sheet is set to <em>"Anyone with the link can view"</em>. <button onclick="fetchData()" style="margin-left:12px;padding:3px 10px;border-radius:6px;border:1px solid var(--red);background:transparent;color:var(--red);cursor:pointer;font-size:0.75rem;">Retry</button>`;
+    document.getElementById('errorBanner').style.display = 'block';
+    if (!allData.length) {
+      showToast('⚠️ No data loaded. Check sheet permissions.', 'error');
+    } else {
+      showToast('⚠️ Showing previous data — refresh failed', 'error');
+    }
+  }
+
+  const now = new Date();
+  // Auto-select latest available month on first data load
+  const monthSel = document.getElementById('fMonth');
+  if (monthSel.value === 'all' && allData.length) {
+    const MONTH_ORDER = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const availableMonths = [...new Set(allData.map(r => (r.month||'').trim()).filter(Boolean))];
+    availableMonths.sort((a,b) => MONTH_ORDER.indexOf(a) - MONTH_ORDER.indexOf(b));
+    if (availableMonths.length === 1) {
+      monthSel.value = availableMonths[0];
+    }
+  }
+  document.getElementById('lastRefresh').textContent =
+    'Last updated: ' + now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  btn.classList.remove('spinning');
+  icon.style.animation = '';
+
+  applyFilters();
+  document.getElementById('mainContent').style.display = 'block';
+
+  // Hide loading overlay
+  const overlay = document.getElementById('loadingOverlay');
+  overlay.classList.add('hidden');
+  setTimeout(() => overlay.style.display = 'none', 500);
+
+  // Reset countdown
+  countdownSec = AUTO_REFRESH_SEC;
+}
+
+// ─────────────────────────────────────────
+// NOTE: No hardcoded fallback data.
+// Dashboard requires live Google Sheets
+// connection to display accurate data.
+// ─────────────────────────────────────────
+
+// ─────────────────────────────────────────
+// FILTERS
+// ─────────────────────────────────────────
+function scoreRangeChange(el) {
+  document.getElementById('scoreRangeLabel').textContent = el.value + '%+';
+  applyFilters();
+}
+function clearFilters() {
+  document.getElementById('fSite').value    = 'all';
+  document.getElementById('fChannel').value = 'all';
+  document.getElementById('fLOB').value     = 'all';
+  document.getElementById('fElig').value    = 'all';
+  document.getElementById('fMonth').value   = 'all';
+  document.getElementById('fSearch').value  = '';
+  document.getElementById('fMinScore').value= 0;
+  document.getElementById('scoreRangeLabel').textContent = '0%+';
+  applyFilters();
+}
+function applyFilters() {
+  const site    = document.getElementById('fSite').value;
+  const channel = document.getElementById('fChannel').value;
+  const lob     = document.getElementById('fLOB').value;
+  const elig    = document.getElementById('fElig').value;
+  const month   = document.getElementById('fMonth').value;
+  const search  = document.getElementById('fSearch').value.toLowerCase();
+  const minScore= parseFloat(document.getElementById('fMinScore').value) || 0;
+
+  filteredData = allData.filter(r =>
+    (site    === 'all' || r.site    === site) &&
+    (channel === 'all' || r.channel === channel) &&
+    (lob     === 'all' || r.lob     === lob) &&
+    (elig    === 'all' || r.eligibility === elig) &&
+    (month   === 'all' || (r.month || '').trim() === month) &&
+    (!search  || r.name.toLowerCase().includes(search) || r.tl.toLowerCase().includes(search)) &&
+    ((r.weighted || 0) >= minScore || minScore === 0)
+  );
+
+  currentPage = 1;
+  updateKPIs();
+  updateCharts();
+  updateLeaderboards();
+  renderTable();
+}
+
+// ─────────────────────────────────────────
+// UTILS
+// ─────────────────────────────────────────
+const avg  = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
+const fmtP = v => v != null ? v.toFixed(1)+'%' : '--';
+const noNull = arr => arr.filter(v => v != null);
+
+// ─────────────────────────────────────────
+// KPIs
+// ─────────────────────────────────────────
+function updateKPIs() {
+  const d = filteredData;
+  const cc  = d.filter(r=>r.channel==='Call Center');
+  const dig = d.filter(r=>r.channel==='Digital');
+  const qual= d.filter(r=>r.eligibility==='QUALIFIED');
+
+  const ccAvg  = avg(noNull(cc.map(r=>r.empathy)));
+  const digAvg = avg(noNull(dig.map(r=>r.empathy)));
+  const wAvg   = avg(noNull(d.map(r=>r.weighted)));
+  const qualPct= d.length ? (qual.length/d.length*100) : 0;
+
+  animateCounter('kCC',       ccAvg,  '%');
+  animateCounter('kDig',      digAvg, '%');
+  animateCounter('kQual',     qual.length, '');
+  animateCounter('kWeighted', wAvg,   '%');
+  animateCounter('kTotal',    d.length, '');
+
+  document.getElementById('kQualSub').textContent    = `of ${d.length} agents (${qualPct.toFixed(0)}%)`;
+  document.getElementById('kTotalSub').textContent   = `${qual.length} qualified, ${d.length - qual.length} not`;
+  document.getElementById('kCCBadge').textContent    = ccAvg >= 79 ? '▲ Target Met' : '↓ Below Target';
+  document.getElementById('kCCBadge').className      = 'kpi-badge ' + (ccAvg >= 79 ? 'badge-green' : 'badge-red');
+  document.getElementById('kDigBadge').textContent   = digAvg >= 65 ? '▲ On Track' : '↓ Below Target';
+  document.getElementById('kDigBadge').className     = 'kpi-badge ' + (digAvg >= 65 ? 'badge-green' : 'badge-orange');
+  document.getElementById('kWeightedBadge').textContent = fmtP(wAvg) + ' avg';
+  document.getElementById('kQualBadge').textContent  = qualPct.toFixed(0) + '% qualification rate';
+  document.getElementById('kTotalBadge').textContent = `${d.length} agents`;
+  document.getElementById('tableCount').textContent  = `(${d.length} agents)`;
+}
+
+function animateCounter(id, target, suffix) {
+  const el = document.getElementById(id);
+  if (!el || isNaN(target)) { el && (el.textContent = '--'); return; }
+  const start = 0, dur = 600, step = 16;
+  const steps = dur/step;
+  let i = 0;
+  const tick = setInterval(() => {
+    i++;
+    const val = target * (i/steps);
+    el.textContent = (Number.isInteger(target) ? Math.round(val) : val.toFixed(1)) + suffix;
+    if (i >= steps) { clearInterval(tick); el.textContent = (Number.isInteger(target) ? target : target.toFixed(1)) + suffix; }
+  }, step);
+}
+
+// ─────────────────────────────────────────
+// CHARTS
+// ─────────────────────────────────────────
+function initCharts() {
+  Chart.defaults.color = '#8b949e';
+  Chart.defaults.borderColor = '#21262d';
+  Chart.defaults.font.family = "'Segoe UI', system-ui";
+  const gridColor = '#21262d';
+
+  // ─ 1. LOB Empathy
+  charts.lobEmpathy = new Chart(document.getElementById('cLOBEmpathy'), {
+    type: 'bar',
+    data: { labels: LOBS, datasets: [{ label:'Avg Empathy Score', data: [], backgroundColor: COLORS_A, borderColor: COLORS, borderWidth: 2, borderRadius: 6 }] },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: ctx => ' ' + ctx.raw?.toFixed(1) + '%' } } },
+      scales: { x:{grid:{color:gridColor}}, y:{min:0,max:100,grid:{color:gridColor}, ticks:{callback:v=>v+'%'}} } }
+  });
+
+  // ─ 2. Eligibility
+  charts.eligibility = new Chart(document.getElementById('cEligibility'), {
+    type: 'bar',
+    data: { labels: LOBS, datasets: [
+      { label:'Qualified',    data:[], backgroundColor:'rgba(63,185,80,0.5)',  borderColor:'#3fb950', borderWidth:2, borderRadius:6 },
+      { label:'Not Eligible', data:[], backgroundColor:'rgba(248,81,73,0.5)', borderColor:'#f85149', borderWidth:2, borderRadius:6 }
+    ]},
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{color:'#8b949e'} } },
+      scales: { x:{stacked:true,grid:{color:gridColor}}, y:{stacked:true,grid:{color:gridColor}} } }
+  });
+
+  // ─ 3. Score Distribution
+  charts.scoreDist = new Chart(document.getElementById('cScoreDist'), {
+    type: 'bar',
+    data: { labels:['<60','60-70','70-80','80-90','90-100'],
+      datasets:[{ label:'Agents', data:[], backgroundColor:['#f8514955','#e3b34155','#58a6ff55','#3fb95055','#bc8cff55'], borderColor:['#f85149','#e3b341','#58a6ff','#3fb950','#bc8cff'], borderWidth:2, borderRadius:8 }]},
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales: { x:{grid:{color:gridColor}}, y:{grid:{color:gridColor}} } }
+  });
+
+  // ─ 4. Site
+  charts.site = new Chart(document.getElementById('cSite'), {
+    type: 'doughnut',
+    data: { labels:['CTG Avg','DHK Avg'], datasets:[{ data:[], backgroundColor:['#bc8cff55','#58a6ff55'], borderColor:['#bc8cff','#58a6ff'], borderWidth:2, hoverOffset:6 }] },
+    options: { responsive:true, maintainAspectRatio:false, cutout:'60%',
+      plugins:{ legend:{ position:'bottom', labels:{color:'#8b949e', padding:14} } } }
+  });
+
+  // ─ 5. Attendance
+  charts.attendance = new Chart(document.getElementById('cAttendance'), {
+    type: 'doughnut',
+    data: { labels:['1-5 days','6-10','11-15','16-20','21+ days'],
+      datasets:[{ data:[], backgroundColor:['#f8514955','#e3b34155','#58a6ff55','#3fb95055','#bc8cff55'], borderColor:['#f85149','#e3b341','#58a6ff','#3fb950','#bc8cff'], borderWidth:2, hoverOffset:8 }]},
+    options: { responsive:true, maintainAspectRatio:false, cutout:'55%',
+      plugins:{ legend:{ position:'bottom', labels:{color:'#8b949e', padding:10} } } }
+  });
+
+  // ─ 6. Radar
+  charts.radar = new Chart(document.getElementById('cRadar'), {
+    type: 'radar',
+    data: { labels:['Acknowledgement & Understanding','Closing / Communication','Proper Listening','Time & Hold Mgmt'],
+      datasets:[{ label:'Floor Avg', data:[], backgroundColor:'rgba(88,166,255,0.15)', borderColor:'#58a6ff', pointBackgroundColor:'#58a6ff', pointBorderColor:'#0d1117', borderWidth:2.5, pointRadius:5 }] },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false} },
+      scales:{ r:{ min:0, max:100, grid:{color:'#30363d'}, angleLines:{color:'#30363d'}, ticks:{color:'#8b949e', backdropColor:'transparent', stepSize:25, callback:v=>v+'%'}, pointLabels:{color:'#c9d1d9', font:{size:11}} } } }
+  });
+
+  // ─ 7. CSAT
+  charts.csat = new Chart(document.getElementById('cCSAT'), {
+    type: 'line',
+    data: { labels:['Mass','Premium','Retail'],
+      datasets:[{ label:'Avg CSAT%', data:[], borderColor:'#58a6ff', backgroundColor:'rgba(88,166,255,0.1)', fill:true, tension:0.4, pointBackgroundColor:'#58a6ff', pointBorderColor:'#0d1117', pointRadius:6, borderWidth:2.5 }] },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false} },
+      scales:{ x:{grid:{color:gridColor}}, y:{min:80,max:100,grid:{color:gridColor}, ticks:{callback:v=>v+'%'}} } }
+  });
+}
+
+function updateCharts() {
+  const d = filteredData;
+  if (!Object.keys(charts).length) return;
+
+  // LOB Empathy
+  const lobEmpathy = LOBS.map(l => { const a=noNull(d.filter(r=>r.lob===l).map(r=>r.empathy)); return a.length?avg(a):null; });
+  charts.lobEmpathy.data.datasets[0].data = lobEmpathy;
+  charts.lobEmpathy.update('active');
+
+  // Eligibility
+  charts.eligibility.data.datasets[0].data = LOBS.map(l=>d.filter(r=>r.lob===l&&r.eligibility==='QUALIFIED').length);
+  charts.eligibility.data.datasets[1].data = LOBS.map(l=>d.filter(r=>r.lob===l&&r.eligibility==='NOT ELIGIBLE').length);
+  charts.eligibility.update('active');
+
+  // Score distribution
+  const bands = [0,0,0,0,0];
+  d.forEach(r=>{ const w=r.weighted; if(!w) return; if(w<60)bands[0]++; else if(w<70)bands[1]++; else if(w<80)bands[2]++; else if(w<90)bands[3]++; else bands[4]++; });
+  charts.scoreDist.data.datasets[0].data = bands;
+  charts.scoreDist.update('active');
+
+  // Site doughnut
+  const ctgAvg = avg(noNull(d.filter(r=>r.site==='CTG').map(r=>r.empathy)));
+  const dhkAvg = avg(noNull(d.filter(r=>r.site==='DHK').map(r=>r.empathy)));
+  charts.site.data.datasets[0].data = [ctgAvg||0, dhkAvg||0];
+  charts.site.update('active');
+
+  // Attendance
+  const att = [0,0,0,0,0];
+  d.forEach(r=>{ const a=r.attendance; if(a<=5)att[0]++; else if(a<=10)att[1]++; else if(a<=15)att[2]++; else if(a<=20)att[3]++; else att[4]++; });
+  charts.attendance.data.datasets[0].data = att;
+  charts.attendance.update('active');
+
+  // Radar
+  const sm = ['ack','closing','listening','time'];
+  charts.radar.data.datasets[0].data = sm.map(k=>{ const a=noNull(d.map(r=>r[k])); return a.length?avg(a):0; });
+  charts.radar.update('active');
+
+  // CSAT
+  const csatLobs = ['Mass','Premium','Retail'];
+  charts.csat.data.datasets[0].data = csatLobs.map(l=>{ const a=noNull(d.filter(r=>r.lob===l).map(r=>r.csat)); return a.length?avg(a):null; });
+  charts.csat.update('active');
+}
+
+// Chart type toggle
+function toggleChartType(chartKey, type, btn) {
+  btn.parentElement.querySelectorAll('.toggle-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const chart = charts[chartKey];
+  if (!chart) return;
+  if (type === 'horizontalBar') { chart.options.indexAxis = 'y'; } 
+  else if (type === 'bar')      { chart.options.indexAxis = 'x'; }
+  else if (type === 'stacked')  { chart.options.scales.x.stacked = chart.options.scales.y.stacked = true; }
+  else if (type === 'grouped')  { chart.options.scales.x.stacked = chart.options.scales.y.stacked = false; }
+  else if (type === 'line')     { chart.config.type = 'line'; chart.data.datasets[0].fill = true; }
+  else if (type === 'bar' && chartKey==='csat') { chart.config.type = 'bar'; chart.data.datasets[0].fill = false; }
+  chart.update();
+}
+
+// ─────────────────────────────────────────
+// LEADERBOARDS
+// ─────────────────────────────────────────
+function updateLeaderboards() {
+  // Agent-level leaderboards from Master_Data (filteredData)
+  const d = filteredData;
+  renderLB('lbWeighted', [...d].sort((a,b)=>(b.weighted||0)-(a.weighted||0)).slice(0,10), 'weighted');
+  renderLB('lbEmpathy',  [...d].sort((a,b)=>(b.empathy ||0)-(a.empathy ||0)).slice(0,10), 'empathy');
+  // TL / QA / Trainer leaderboards come from Leadership tab via applyLeadershipData()
+  // They are refreshed on every fetchData() call — no action needed here.
+}
+function renderLB(id, items, field) {
+  if (!items.length) { document.getElementById(id).innerHTML = '<div class="empty-state">No data</div>'; return; }
+  document.getElementById(id).innerHTML = items.map((r,i) => `
+    <div class="lb-item" onclick="openModal(${allData.indexOf(r)})">
+      <div class="rank-badge ${i===0?'r1':i===1?'r2':i===2?'r3':'rN'}">${i+1}</div>
+      <div class="lb-info">
+        <div class="lb-name">${r.name}</div>
+        <div class="lb-meta">${r.lob} · ${r.site}</div>
+      </div>
+      <div class="lb-bar-wrap"><div class="lb-bar" style="width:${r[field]||0}%"></div></div>
+      <div class="lb-score-val">${fmtP(r[field])}</div>
+    </div>`).join('');
+}
+
+// ─────────────────────────────────────────
+// TABLE
+// ─────────────────────────────────────────
+let _sortedData = [];
+function sortTable(key) {
+  document.querySelectorAll('thead th').forEach(th=>th.className='');
+  const idx = ['rank','site','name','lob','tl','attendance','empathy','weighted','csat','ce','eligibility'].indexOf(key);
+  if (sortKey === key) { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; }
+  else { sortKey = key; sortDir = 'desc'; }
+  document.querySelectorAll('thead th')[idx].className = 'sort-' + sortDir;
+  currentPage = 1;
+  renderTable();
+}
+function renderTable() {
+  const pageSize = parseInt(document.getElementById('pageSize').value);
+  _sortedData = [...filteredData].sort((a,b) => {
+    let va = a[sortKey], vb = b[sortKey];
+    if (sortKey === 'name' || sortKey === 'site' || sortKey === 'lob' || sortKey === 'tl' || sortKey === 'eligibility') {
+      va = (va||'').toLowerCase(); vb = (vb||'').toLowerCase();
+      return sortDir==='asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    }
+    va = va || 0; vb = vb || 0;
+    return sortDir === 'asc' ? va - vb : vb - va;
+  });
+
+  const total  = _sortedData.length;
+  const pages  = Math.ceil(total / pageSize);
+  const start  = (currentPage-1)*pageSize;
+  const end    = Math.min(start+pageSize, total);
+  const pageData = _sortedData.slice(start, end);
+
+  const tbody = document.getElementById('agentTbody');
+  if (!pageData.length) {
+    tbody.innerHTML = '<tr><td colspan="11" class="empty-state">No agents match your filters.</td></tr>';
+  } else {
+    tbody.innerHTML = pageData.map((r,i) => {
+      const globalIdx = allData.indexOf(r);
+      const w = r.weighted||0;
+      const barClass = w>=85?'bar-g':w>=70?'bar-o':'bar-r';
+      const eClass   = r.empathy>=85?'bar-g':r.empathy>=70?'bar-o':'bar-r';
+      return `<tr onclick="openModal(${globalIdx})">
+        <td style="color:var(--text-muted)">${start+i+1}</td>
+        <td><span class="site-badge ${r.site==='CTG'?'site-ctg':'site-dhk'}">${r.site}</span></td>
+        <td><strong style="color:var(--text-primary)">${r.name}</strong></td>
+        <td><span class="pill pill-lob" onclick="event.stopPropagation();filterByLOB('${r.lob}')">${r.lob}</span></td>
+        <td style="font-size:0.75rem;color:var(--text-secondary)">${r.tl}</td>
+        <td>${r.attendance}</td>
+        <td>${fmtP(r.empathy)}<span class="mini-bar-wrap"><span class="mini-bar ${eClass}" style="width:${r.empathy||0}%"></span></span></td>
+        <td>${fmtP(r.weighted)}<span class="mini-bar-wrap"><span class="mini-bar ${barClass}" style="width:${w}%"></span></span></td>
+        <td>${fmtP(r.csat)}</td>
+        <td>${fmtP(r.ce)}</td>
+        <td><span class="pill ${r.eligibility==='QUALIFIED'?'pill-q':'pill-ne'}">${r.eligibility==='QUALIFIED'?'✅ Qualified':'❌ Not Eligible'}</span></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Pagination
+  document.getElementById('pageInfo').textContent = `Showing ${start+1}–${end} of ${total} agents`;
+  const pageBtns = document.getElementById('pageBtns');
+  let btns = '';
+  btns += `<button class="page-btn" onclick="changePage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>`;
+  const range = getPageRange(currentPage, pages);
+  range.forEach(p => {
+    if (p === '…') btns += `<button class="page-btn" disabled>…</button>`;
+    else btns += `<button class="page-btn ${p===currentPage?'active':''}" onclick="changePage(${p})">${p}</button>`;
+  });
+  btns += `<button class="page-btn" onclick="changePage(${currentPage+1})" ${currentPage===pages?'disabled':''}>›</button>`;
+  pageBtns.innerHTML = btns;
+}
+function getPageRange(cur, total) {
+  if (total <= 7) return Array.from({length:total},(_,i)=>i+1);
+  if (cur <= 4) return [1,2,3,4,5,'…',total];
+  if (cur >= total-3) return [1,'…',total-4,total-3,total-2,total-1,total];
+  return [1,'…',cur-1,cur,cur+1,'…',total];
+}
+function changePage(p) {
+  const pageSize = parseInt(document.getElementById('pageSize').value);
+  const pages = Math.ceil(filteredData.length / pageSize);
+  if (p < 1 || p > pages) return;
+  currentPage = p;
+  renderTable();
+  document.getElementById('agentTbody').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+function filterByLOB(lob) {
+  document.getElementById('fLOB').value = lob;
+  applyFilters();
+  showToast(`🔍 Filtered by LOB: ${lob}`, 'success');
+}
+
+// ─────────────────────────────────────────
+// EXPORT CSV
+// ─────────────────────────────────────────
+function exportCSV() {
+  const cols = ['Name','Site','LOB','Channel','TL','QA','Attendance','Empathy Score','Weighted Score','CSAT%','CE%','Eligibility','Ack & Understanding','Closing','Listening','Time Mgmt'];
+  const rows = [cols.join(',')];
+  filteredData.forEach(r => {
+    rows.push([
+      `"${r.name}"`, r.site, r.lob, r.channel, `"${r.tl}"`, `"${r.qa}"`,
+      r.attendance, r.empathy, r.weighted, r.csat, r.ce, r.eligibility,
+      r.ack, r.closing, r.listening, r.time
+    ].join(','));
+  });
+  const blob = new Blob([rows.join('\n')], { type:'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `empathy_dashboard_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  showToast('📥 CSV exported successfully!', 'success');
+}
+
+// ─────────────────────────────────────────
+// AGENT MODAL
+// ─────────────────────────────────────────
+function openModal(idx) {
+  const r = allData[idx];
+  if (!r) return;
+  const bars = [
+    ['Acknowledgement & Understanding', r.ack],
+    ['Closing / Communication',         r.closing],
+    ['Proper Listening',                r.listening],
+    ['Time & Hold Management',          r.time],
+    ['Empathy Score',                   r.empathy],
+    ['Weighted Score',                  r.weighted],
+  ];
+  document.getElementById('modalBody').innerHTML = `
+    <div class="modal-name">${r.name}</div>
+    <div class="modal-meta">${r.site} · ${r.lob} · ${r.channel} · ${r.month||'February 2026'}</div>
+    <div class="modal-grid">
+      <div class="modal-stat"><div class="modal-stat-label">Empathy Score</div><div class="modal-stat-value" style="color:var(--blue)">${fmtP(r.empathy)}</div></div>
+      <div class="modal-stat"><div class="modal-stat-label">Weighted Score</div><div class="modal-stat-value" style="color:var(--green)">${fmtP(r.weighted)}</div></div>
+      <div class="modal-stat"><div class="modal-stat-label">CSAT / Esc Acc</div><div class="modal-stat-value">${fmtP(r.csat)}</div></div>
+      <div class="modal-stat"><div class="modal-stat-label">CE%</div><div class="modal-stat-value">${fmtP(r.ce)}</div></div>
+      <div class="modal-stat"><div class="modal-stat-label">Attendance</div><div class="modal-stat-value">${r.attendance} days</div></div>
+      <div class="modal-stat"><div class="modal-stat-label">Eligibility</div><div class="modal-stat-value" style="color:${r.eligibility==='QUALIFIED'?'var(--green)':'var(--red)'}; font-size:1rem">${r.eligibility==='QUALIFIED'?'✅ Qualified':'❌ Not Eligible'}</div></div>
+    </div>
+    <div class="modal-bar-section">
+      <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:12px">Sub-metric Breakdown</div>
+      ${bars.map(([label,val])=>`
+        <div class="modal-bar-row">
+          <div class="modal-bar-label">${label}</div>
+          <div class="modal-bar-track"><div class="modal-bar-fill" style="width:${val||0}%"></div></div>
+          <div class="modal-bar-val">${fmtP(val)}</div>
+        </div>`).join('')}
+    </div>
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);font-size:0.72rem;color:var(--text-muted)">
+      <strong>Team Lead:</strong> ${r.tl || '—'} &nbsp;|&nbsp; <strong>QA:</strong> ${r.qa || '—'} &nbsp;|&nbsp; <strong>Trainer:</strong> ${r.trainer || '—'}
+    </div>`;
+  document.getElementById('agentModal').classList.add('open');
+}
+function closeModal() { document.getElementById('agentModal').classList.remove('open'); }
+function closeModalOutside(e) { if (e.target === document.getElementById('agentModal')) closeModal(); }
+document.addEventListener('keydown', e => { if (e.key==='Escape') closeModal(); });
+
+// ─────────────────────────────────────────
+// TOAST
+// ─────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className   = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, 3000);
+}
+
+// ─────────────────────────────────────────
+// AUTO-REFRESH COUNTDOWN
+// ─────────────────────────────────────────
+function startCountdown() {
+  countdownSec = AUTO_REFRESH_SEC;
+  clearInterval(countdownTimer);
+  countdownTimer = setInterval(() => {
+    countdownSec--;
+    const m = Math.floor(countdownSec/60), s = countdownSec%60;
+    document.getElementById('autoRefreshCountdown').textContent =
+      `Auto-refresh in ${m}:${String(s).padStart(2,'0')}`;
+    if (countdownSec <= 0) { clearInterval(countdownTimer); fetchData().then(startCountdown); }
+  }, 1000);
+}
+
+// ─────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  initCharts();
+  await fetchData();
+  startCountdown();
+});
+</script>
+</body>
+</html>
